@@ -1,53 +1,87 @@
-# Dining Concierge — CS-GY 9223 HW1
+# Dining Concierge — Serverless Chatbot (CS-GY 9223 Fall 2025)
 
-## Overview
-This project implements a Dining Concierge chatbot using serverless AWS services:
-- Frontend hosted on S3 (static website).
-- API Gateway + Lambda (LF0) to forward chat messages to Amazon Lex v2.
-- Amazon Lex v2 bot with intents (GreetingIntent, ThankYouIntent, DiningSuggestionsIntent) and Lambda code hook (LF1).
-- SQS queue (Q1) to hold suggestion requests.
-- DynamoDB table `yelp-restaurants` to store Yelp restaurant data.
-- OpenSearch index `restaurants` for cuisine search.
-- Worker Lambda (LF2) reads SQS, queries OpenSearch & DynamoDB, and sends emails via SES.
+## 🧩 Overview
+Dining Concierge is a **serverless chatbot** that suggests restaurants using AWS services.  
+Users interact with a Lex v2 chatbot via a web frontend hosted on S3.  
+Requests flow through API Gateway and multiple Lambda functions that store data in DynamoDB, query OpenSearch, and send restaurant suggestions by email through SES.
 
-## Setup (high level)
-1. Clone frontend starter repo and build: `npm install && npm run build`
-2. Create S3 bucket and enable static website hosting, upload build output.
-3. Create required IAM roles (see IAM section).
-4. Create DynamoDB table `yelp-restaurants`.
-5. Create OpenSearch domain and index `restaurants`.
-6. Create SQS queue `dining-requests-queue` (and optional DLQ).
-7. Set up Lex v2 bot with intents and Lambda code hook (LF1).
-8. Deploy Lambda functions LF0, LF1, LF2 with required env vars and roles.
-9. Create API Gateway API from provided swagger, integrate LF0, enable CORS, and deploy.
-10. Configure SES sender email and verify.
-11. Run Yelp scraping script to populate DynamoDB and OpenSearch (requires `YELP_API_KEY`).
-12. Create EventBridge scheduled rule to trigger LF2 every minute.
+## 🏗️ Architecture
+**Frontend (S3)** → **API Gateway** → **Lambda (LF0)** → **Lex v2 Bot + LF1 Code Hook** → **SQS Queue (Q1)** → **Lambda (LF2)** → **DynamoDB + OpenSearch + SES**  
+All services communicate via event-driven, fully managed AWS components.
 
-## Files
-- `lf0_lambda.py` — API gateway handler & Lex integration
-- `lf1_lex_hook.py` — Lex code hook that validates slots and pushes SQS messages
-- `lf2_worker.py` — SQS worker that queries OpenSearch/DynamoDB and sends emails via SES
-- `scripts/scrape_yelp.py` — Yelp scraping & ingestion script
+## ⚙️ AWS Resources
+| Component | Purpose |
+|------------|----------|
+| **S3** | Hosts static frontend (public website) |
+| **API Gateway** | REST API layer importing `swagger.yaml` |
+| **Lambda LF0** | Receives API calls, forwards text to Lex |
+| **Lex v2 Bot** | Conversational interface (Greeting, ThankYou, DiningSuggestions) |
+| **Lambda LF1** | Lex code hook; validates slots, sends SQS messages |
+| **SQS (Q1)** | Queues user dining requests |
+| **Lambda LF2** | Processes SQS messages, queries OpenSearch & DynamoDB, sends emails |
+| **DynamoDB (yelp-restaurants)** | Stores detailed restaurant data |
+| **OpenSearch** | Indexes restaurants by cuisine |
+| **SES** | Sends suggestion emails |
+| **EventBridge** | Triggers LF2 every minute |
+| **IAM Roles** | Provide Lambda + service permissions |
 
-## Environment variables (Lambda)
-LF0:
-- `LEX_BOT_ID`
-- `LEX_BOT_ALIAS_ID`
-- `LEX_BOT_LOCALE` (optional)
+## 🪜 High-Level Steps
+1. **Frontend Setup**  
+   - Clone starter repo → `npm install && npm run build`  
+   - Create S3 bucket → disable public-block → upload build → enable static website hosting.  
 
-LF1:
-- `SQS_URL`
+2. **IAM & Roles**  
+   - Create `LambdaWorkerRole` with `AWSLambdaBasicExecutionRole`, `AmazonSQSFullAccess`, `AmazonDynamoDBFullAccess`, `AmazonOpenSearchServiceFullAccess`, `AmazonSESFullAccess`.  
 
-LF2:
-- `SQS_URL`
-- `OPENSEARCH_ENDPOINT`
-- `DYNAMO_TABLE` (yelp-restaurants)
-- `SES_SENDER`
+3. **Lex Bot Creation**  
+   - Create Lex v2 bot `DiningConciergeBot` with intents: *Greeting*, *ThankYou*, *DiningSuggestions*.  
+   - Add slots: `Location`, `Cuisine`, `DiningDate`, `DiningTime`, `NumberOfPeople`, `Email`.  
+   - Configure Lambda code hook = **LF1**. Deploy alias `Prod`.  
 
-## Troubleshooting
-Read the project's `Troubleshooting` section in the project wiki. (See detailed instructions in the assignment doc.)
+4. **Lambda Functions**  
+   - **LF0** → Handles API Gateway requests, calls Lex (`boto3.lexv2-runtime`).  
+   - **LF1** → Lex hook; validates slots and pushes message to **SQS (Q1)**.  
+   - **LF2** → Reads SQS, fetches restaurants from **OpenSearch** & **DynamoDB**, sends email via **SES**.  
 
-## Notes
-- AWS resource names must be unique per account and region.
-- SES may be in sandbox—verify recipients or request production access for sending to arbitrary addresses.
+5. **API Gateway**  
+   - Import `swagger/swagger.yaml`, integrate POST endpoint with **LF0**, enable CORS, deploy stage `prod`.  
+
+6. **Backend Data**  
+   - Create DynamoDB table `yelp-restaurants` (PK=`BusinessID`).  
+   - Create OpenSearch domain, index `restaurants`.  
+   - Run `scripts/scrape_yelp.py` to fetch 1000+ Manhattan restaurants (using Yelp API) and populate both.  
+
+7. **SQS & EventBridge**  
+   - Create queue `dining-requests-queue` (+ optional DLQ).  
+   - Schedule LF2 every minute using EventBridge rule `rate(1 minute)`.  
+
+8. **SES Setup**  
+   - Verify sender email (and recipient if SES sandbox).  
+   - Add env var `SES_SENDER` to LF2.  
+
+9. **Testing Flow**  
+   - Visit S3 website → type messages (“I need restaurant suggestions”).  
+   - LF0 → Lex → LF1 → SQS → LF2 → SES email with suggestions.  
+
+## 🧰 Tools
+Developed with **VSCode**, **PowerShell**, and **AWS CLI** on Windows.  
+All Lambda functions are written in **Python 3.10** and deployed via zip or console.
+
+## 🚑 Troubleshooting
+- **CORS 403** → Enable in API Gateway + include header in Lambda responses.  
+- **Lex errors** → Check CloudWatch logs & ensure correct bot IDs.  
+- **SES rejects** → Verify sender/recipient or move account out of sandbox.  
+- **SQS unprocessed** → Review LF2 logs; unhandled messages move to DLQ.  
+- **OpenSearch 403** → Update domain access policy for Lambda role.  
+
+## 🧾 Deliverables
+- Working chatbot (frontend + backend)  
+- Screenshots: Lex dialog, SQS/DLQ, DynamoDB, SES email  
+- Source code: `lf0_lambda.py`, `lf1_lex_hook.py`, `lf2_worker.py`, `scrape_yelp.py`, and this README  
+
+---
+
+**Author:** Abhishek Nath  
+**Environment:** AWS Cloud (Serverless Stack)  
+**Languages:** Python, JavaScript  
+**Goal:** Demonstrate a complete event-driven serverless application on AWS.
