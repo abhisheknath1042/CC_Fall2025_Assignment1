@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::238005914314:user/abhishek.nath",
+          "arn:aws:iam::238005914314:role/concierge-lambda-role"
+        ]
+      },
+      "Action": "es:*",
+      "Resource": "arn:aws:es:us-east-1:238005914314:domain/restaurants-domain/*"
+    }
+  ]
+}
