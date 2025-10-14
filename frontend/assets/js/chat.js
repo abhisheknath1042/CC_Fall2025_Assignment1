@@ -52,6 +52,15 @@ $(document).ready(function() {
         console.log(response);
         var data = response.data;
 
+        // If backend returned a proxy-style object, parse it
+        if (data.body && typeof data.body === "string") {
+          try {
+            data = JSON.parse(data.body);
+          } catch (e) {
+            console.log("Failed to parse backend body JSON:", e);
+          }
+        }
+
         if (data.messages && data.messages.length > 0) {
           console.log('received ' + data.messages.length + ' messages');
 

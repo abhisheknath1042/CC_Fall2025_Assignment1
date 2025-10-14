@@ -1,0 +1,9 @@
+{
+  "cluster": ["cluster_composite_ops"],
+  "index": [
+    {
+      "names": ["restaurants*"],
+      "privileges": ["read", "write", "create_index"]
+    }
+  ]
+}
